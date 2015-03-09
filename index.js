@@ -44,10 +44,10 @@ module.exports = function(opt) {
 
         var self = this;
 
-        kss.parse(buffer, opt.kssOpts, function (err, styleguide) {
+        kss.parse(buffer.join("\n"), opt.kssOpts, function (err, styleguide) {
             if (err) console.log('Error', error);
 
-                var sections = styleguide.section('*.'),
+                var sections = styleguide.section(),
                     i, sectionCount = sections.length,
                     sectionRoots = [], currentRoot,
                     rootCount, childSections = [];
@@ -120,23 +120,6 @@ module.exports = function(opt) {
                         self.emit('data', file);
                     }));
             }
-            // Copy template assets, less compilation added because default template uses it
-            gulp.src(path.join(opt.templateDirectory, '/**/*.less'))
-                .pipe(gulpless())
-                .pipe(through(function (file) {
-
-                  self.emit('data', file);
-                }).on('end', function() {
-                  emitEnd(self);
-                }));
-
-            gulp.src(path.join(opt.templateDirectory, '/**/*.js'))
-                .pipe(through(function (file) {
-
-                  self.emit('data', file);
-                }).on('end', function() {
-                  emitEnd(self);
-                }));
         });
     }
 

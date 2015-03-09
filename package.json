@@ -1,5 +1,5 @@
 {
-  "name": "gulp-kss",
+  "name": "gulp-kss-styleguide",
   "version": "0.0.1",
   "description": "Gulp plugin for KSS (Knyle Style Sheets) documentation generation",
   "repository": {
