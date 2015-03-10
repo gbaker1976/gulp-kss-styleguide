@@ -128,19 +128,8 @@ module.exports = function (handlebars, styleguide) {
 
         // Otherwise return the modifier markup
         return new handlebars.SafeString(
-            new kss.KssModifier(modifier).markup()
+            new kss.KssModifier( modifier ).markup()
         );
-    });
-
-    /**
-    * Quickly avoid escaping strings
-    * @param  {String} arg The unescaped HTML
-    */
-    handlebars.registerHelper('html', function(arg) {
-        // Warn the user that html is deprecated.
-        console.log('{{html expression}} is deprecated; use HandleBars’ triple-stash instead: {{{expression}}}.');
-        
-        return new handlebars.SafeString(arg || '');
     });
 
     /**

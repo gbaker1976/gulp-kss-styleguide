@@ -18,108 +18,91 @@ var handlebarHelpers = require('./handlebarHelpers');
     https://github.com/hughsk/kss-node/blob/master/bin/kss-node
  */
 
-module.exports = function(opt) {
+module.exports = function( opt ) {
+
     'use strict';
+
     if (!opt) opt = {};
     if (!opt.templateDirectory) opt.templateDirectory = __dirname + '/node_modules/kss/lib/template';
     if (!opt.kssOpts) opt.kssOpts = {};
 
     var buffer = [];
     var firstFile = null;
+    var joinedPath = null;
 
     /* Is called for each file and writes all files to buffer */
-    function bufferContents(file){
+    function bufferContents( file ){
         if (file.isNull()) return; // ignore
-        if (file.isStream()) return this.emit('error', new PluginError('gulp-kss',  'Streaming not supported'));
+        if (file.isStream()) return this.emit( 'error', new PluginError( 'gulp-kss',  'Streaming not supported' ));
 
         if (!firstFile) firstFile = file;
 
-        buffer.push(file.contents.toString('utf8'));
+        joinedPath = path.join( firstFile.base, 'index.html' );
+
+        buffer.push(file.contents.toString( 'utf8' ));
     }
 
     /* Is called when all files were added to buffer */
     function endStream(){
-        var template = fs.readFileSync(path.join(opt.templateDirectory, 'index.html'), 'utf8');
-        template = handlebars.compile(template);
-
         var self = this;
+        var template = fs.readFileSync( opt.template, 'utf8' );
+        var contentBuffer = [];
+        var content = '';
 
-        kss.parse(buffer.join("\n"), opt.kssOpts, function (err, styleguide) {
+        template = handlebars.compile( template );
+
+        kss.parse( buffer.join( "\n" ), opt.kssOpts, function ( err, styleguide ) {
             if (err) console.log('Error', error);
 
-                var sections = styleguide.section(),
-                    i, sectionCount = sections.length,
-                    sectionRoots = [], currentRoot,
-                    rootCount, childSections = [];
-
+            var sections = styleguide.section(),
+                i = 0,
+                sectionCount = sections.length,
+                sectionRoots = [],
+                childSections = [],
+                currentRoot,
+                rootCount;
 
             // Accumulate all of the sections' first indexes
             // in case they don't have a root element.
             for (i = 0; i < sectionCount; i += 1) {
-                currentRoot = sections[i].reference().match(/[0-9]*\.?/)[0].replace('.', '');
+                currentRoot = sections[i].reference().match( /[0-9]*\.?/ )[0].replace( '.', '' );
 
-                if (!~sectionRoots.indexOf(currentRoot)) {
-                    sectionRoots.push(currentRoot);
+                if ( !~sectionRoots.indexOf( currentRoot ) ) {
+                    sectionRoots.push( currentRoot );
                 }
             }
 
             sectionRoots.sort();
             rootCount = sectionRoots.length;
 
-            handlebarHelpers(handlebars, styleguide);
+            handlebarHelpers( handlebars, styleguide );
 
             // Now, group all of the sections by their root
             // reference, and make a page for each.
             for (i = 0; i < rootCount; i += 1) {
-                childSections = styleguide.section(sectionRoots[i]+'.*');
+                childSections = styleguide.section( sectionRoots[ i ] + '.*' );
 
-                var content = template({
-                    styleguide: styleguide,
-                    sections: jsonSections(childSections),
-                    rootNumber: sectionRoots[i],
-                    sectionRoots: sectionRoots,
-                    overview: false,
-                    argv: {}
+                contentBuffer.push({
+                    reference: sectionRoots[ i ],
+                    childSections: jsonSections( childSections )
                 });
-
-                var joinedPath = path.join(firstFile.base, 'section-' + sectionRoots[i] + '.html');
-
-                var file = new File({
-                  cwd: firstFile.cwd,
-                  base: firstFile.base,
-                  path: joinedPath,
-                  contents: new Buffer(content)
-                });
-
-                self.emit('data', file);
             }
 
-            // Generate Overview File
-            if (opt.overview) {
-                gulp.src(opt.overview)
-                    .pipe(through(function (file) {
+            content = template({
+                styleguide: styleguide,
+                sections: contentBuffer,
+                sectionRoots: sectionRoots
+            });
 
-                        var content = template({
-                            styleguide: styleguide,
-                            sectionRoots: sectionRoots,
-                            sections: jsonSections(childSections),
-                            rootNumber: 0,
-                            argv: {},
-                            overview: marked(file.contents.toString('utf8'), 'utf8')
-                        });
+            var file = new File({
+              cwd: firstFile.cwd,
+              base: firstFile.base,
+              path: joinedPath,
+              contents: new Buffer( content )
+            });
 
-                        var joinedPath = path.join(firstFile.base, 'index.html');
+            self.emit( 'data', file );
 
-                        var file = new File({
-                            cwd: firstFile.cwd,
-                            base: firstFile.base,
-                            path: joinedPath,
-                            contents: new Buffer(content)
-                        });
-
-                        self.emit('data', file);
-                    }));
-            }
         });
     }
 
@@ -145,7 +128,8 @@ module.exports = function(opt) {
                 depth: section.data.refDepth,
                 deprecated: section.deprecated(),
                 experimental: section.experimental(),
-                modifiers: jsonModifiers(section.modifiers())
+                modifiers: jsonModifiers(section.modifiers()),
+                markup: section.markup() || ''
             };
         });
     }
@@ -156,7 +140,10 @@ module.exports = function(opt) {
             return {
                 name: modifier.name(),
                 description: modifier.description(),
-                className: modifier.className()
+                className: modifier.className(),
+                markup: handlebars.compile( modifier.markup() || '' )({
+                    modifier_class: modifier.className() || ''
+                })
             };
         });
     }
