@@ -1,6 +1,5 @@
 var path = require('path');
 var fs = require('fs');
-
 var through = require('through');
 var gulp = require('gulp');
 var gutil = require('gulp-util');
