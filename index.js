@@ -58,12 +58,14 @@ module.exports = function( opt ) {
                 sectionCount = sections.length,
                 sectionRoots = [],
                 childSections = [],
+                parentSection,
                 currentRoot,
-                rootCount;
+                rootCount,
+                section;
 
             // Accumulate all of the sections' first indexes
             // in case they don't have a root element.
-            for (i = 0; i < sectionCount; i += 1) {
+            for ( i = 0; i < sectionCount; i++ ) {
                 currentRoot = sections[i].reference().match( /[0-9]*\.?/ )[0].replace( '.', '' );
 
                 if ( !~sectionRoots.indexOf( currentRoot ) ) {
@@ -77,30 +79,55 @@ module.exports = function( opt ) {
             handlebarHelpers( handlebars, styleguide );
 
             // Now, group all of the sections by their root
-            // reference, and make a page for each.
-            for (i = 0; i < rootCount; i += 1) {
+            for ( i = 0; i < rootCount; i++ ) {
                 childSections = styleguide.section( sectionRoots[ i ] + '.*' );
-
-                contentBuffer.push({
+                parentSection = styleguide.section( sectionRoots[ i ] );
+                section = {
                     reference: sectionRoots[ i ],
+                    header: parentSection.header(),
                     childSections: jsonSections( childSections )
+                };
+
+                // combined sections for master page
+                contentBuffer.push( section );
+
+                // create path for section page
+                joinedPath = path.join( firstFile.base, 'section-' + sectionRoots[ i ] + '.html' );
+
+                // content for section page
+                content = template({
+                    styleguide: styleguide,
+                    sections: [ section ],
+                    sectionRoots: sectionRoots
                 });
+
+                // section page
+                self.emit( 'data', new File({
+                  cwd: firstFile.cwd,
+                  base: firstFile.base,
+                  path: joinedPath,
+                  contents: new Buffer( content )
+                }));
             }
 
+            // create path for master page
+            joinedPath = path.join( firstFile.base, 'index.html' );
+
+            // content for master page
             content = template({
                 styleguide: styleguide,
                 sections: contentBuffer,
+                isMaster: true,
                 sectionRoots: sectionRoots
             });
 
-            var file = new File({
+            // master page
+            self.emit( 'data', new File({
               cwd: firstFile.cwd,
               base: firstFile.base,
               path: joinedPath,
               contents: new Buffer( content )
-            });
-
-            self.emit( 'data', file );
+            }));
 
         });
     }
