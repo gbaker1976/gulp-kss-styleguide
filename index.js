@@ -21,9 +21,12 @@ module.exports = function( opt ) {
 
     'use strict';
 
-    if (!opt) opt = {};
-    if (!opt.templateDirectory) opt.templateDirectory = __dirname + '/node_modules/kss/lib/template';
-    if (!opt.kssOpts) opt.kssOpts = {};
+    opt = opt || {};
+    opt.kssOpts = opt.kssOpts || {};
+
+    if ( !opt.templates ) {
+      return this.emit( 'error', new PluginError( 'gulp-kss',  'You must supply at least a main template' ));
+    }
 
     var buffer = [];
     var firstFile = null;
@@ -36,19 +39,14 @@ module.exports = function( opt ) {
 
         if (!firstFile) firstFile = file;
 
-        joinedPath = path.join( firstFile.base, 'index.html' );
-
         buffer.push(file.contents.toString( 'utf8' ));
     }
 
     /* Is called when all files were added to buffer */
     function endStream(){
         var self = this;
-        var template = fs.readFileSync( opt.template, 'utf8' );
         var contentBuffer = [];
         var content = '';
-
-        template = handlebars.compile( template );
 
         kss.parse( buffer.join( "\n" ), opt.kssOpts, function ( err, styleguide ) {
             if (err) console.log('Error', error);
@@ -84,50 +82,18 @@ module.exports = function( opt ) {
                 parentSection = styleguide.section( sectionRoots[ i ] );
                 section = {
                     reference: sectionRoots[ i ],
+                    id: sectionRoots[ i ].replace( /\./g, '-' ),
                     header: parentSection.header(),
-                    childSections: jsonSections( childSections )
+                    childSections: jsonSections( childSections, firstFile.base ),
+                    url: path.join( firstFile.base, 'section-' + sectionRoots[ i ] + '.html' )
                 };
 
                 // combined sections for master page
                 contentBuffer.push( section );
-
-                // create path for section page
-                joinedPath = path.join( firstFile.base, 'section-' + sectionRoots[ i ] + '.html' );
-
-                // content for section page
-                content = template({
-                    styleguide: styleguide,
-                    sections: [ section ],
-                    sectionRoots: sectionRoots
-                });
-
-                // section page
-                self.emit( 'data', new File({
-                  cwd: firstFile.cwd,
-                  base: firstFile.base,
-                  path: joinedPath,
-                  contents: new Buffer( content )
-                }));
             }
 
-            // create path for master page
-            joinedPath = path.join( firstFile.base, 'index.html' );
-
-            // content for master page
-            content = template({
-                styleguide: styleguide,
-                sections: contentBuffer,
-                isMaster: true,
-                sectionRoots: sectionRoots
-            });
-
-            // master page
-            self.emit( 'data', new File({
-              cwd: firstFile.cwd,
-              base: firstFile.base,
-              path: joinedPath,
-              contents: new Buffer( content )
-            }));
+            generateMasterPage.call( self, opt, styleguide, contentBuffer, sectionRoots, firstFile.cwd, firstFile.base );
+            generateSectionPages.call( self, opt, styleguide, contentBuffer, sectionRoots, firstFile.cwd, firstFile.base );
 
         });
     }
@@ -145,17 +111,21 @@ module.exports = function( opt ) {
       self.emit('end');
     });
 
-    function jsonSections(sections) {
+    function jsonSections(sections, base) {
+        var id;
         return sections.map(function(section) {
+            id = section.reference().replace( /\./g, '-' );
             return {
                 header: section.header(),
                 description: section.description(),
                 reference: section.reference(),
+                id: id,
                 depth: section.data.refDepth,
                 deprecated: section.deprecated(),
                 experimental: section.experimental(),
                 modifiers: jsonModifiers(section.modifiers()),
-                markup: section.markup() || ''
+                markup: section.markup() || '',
+                url: path.join( base, 'section-' + id + '.html' )
             };
         });
     }
@@ -173,6 +143,80 @@ module.exports = function( opt ) {
             };
         });
     }
+
+    function generateMasterPage( opt, styleguide, sections, sectionRoots, cwd, base ) {
+      var template = fs.readFileSync( opt.templates.main, 'utf8' );
+
+      template = handlebars.compile( template );
+
+      // content for master page
+      var content = template({
+          styleguide: styleguide,
+          sections: sections,
+          isMaster: true,
+          sectionRoots: sectionRoots
+      });
+
+      // master page
+      this.emit( 'data', new File({
+        cwd: cwd,
+        base: base,
+        path: path.join( base, 'index.html' ),
+        contents: new Buffer( content )
+      }));
+    };
+
+    function generateSectionPages( opt, styleguide, sections, sectionRoots, cwd, base ) {
+      var content;
+      var self = this;
+      var template = fs.readFileSync( opt.templates.section, 'utf8' );
+
+      template = handlebars.compile( template );
+
+      sections.forEach(function( section ){
+        // content for section page
+        content = template({
+            styleguide: styleguide,
+            sections: [ section ],
+            sectionRoots: sectionRoots
+        });
+
+        // section page
+        self.emit( 'data', new File({
+          cwd: cwd,
+          base: base,
+          path: section.url,
+          contents: new Buffer( content )
+        }));
+
+        generateSubsectionPages.call( self, opt, styleguide, section.childSections, sectionRoots, cwd, base );
+      });
+    };
+
+    function generateSubsectionPages( opt, styleguide, sections, sectionRoots, cwd, base ) {
+      var content;
+      var self = this;
+      var template = fs.readFileSync( opt.templates.subsection, 'utf8' );
+
+      template = handlebars.compile( template );
+
+      sections.forEach(function( section ){
+        // content for section page
+        content = template({
+            styleguide: styleguide,
+            sections: [ section ],
+            sectionRoots: sectionRoots
+        });
+
+        // section page
+        self.emit( 'data', new File({
+          cwd: cwd,
+          base: base,
+          path: section.url,
+          contents: new Buffer( content )
+        }));
+      });
+    };
 
     return through(bufferContents, endStream);
 };
